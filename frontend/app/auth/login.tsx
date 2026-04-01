@@ -37,11 +37,14 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="cube-outline" size={64} color="#2563EB" />
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/images/grabit-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
 
-        <Text style={styles.title}>GrabIt</Text>
         <Text style={styles.subtitle}>College-only rentals</Text>
 
         <View style={styles.spacer} />
@@ -69,27 +72,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     justifyContent: 'center',
   },
-  iconContainer: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoContainer: {
     alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-    marginBottom: 28,
+    marginBottom: 40,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#111827',
-    marginBottom: 8,
+  logo: {
+    width: 200,
+    height: 120,
   },
   subtitle: {
     fontSize: 16,
