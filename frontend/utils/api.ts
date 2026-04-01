@@ -39,6 +39,13 @@ class ApiClient {
     });
   }
 
+  async googleAuth(idToken: string): Promise<User> {
+    return this.request<User>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken }),
+    });
+  }
+
   async getMe(): Promise<User> {
     return this.request<User>('/auth/me');
   }

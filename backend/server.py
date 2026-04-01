@@ -13,8 +13,16 @@ from datetime import datetime, timezone, timedelta
 import httpx
 import socketio
 
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+# Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Google OAuth Config
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -125,6 +133,9 @@ class ChatMessage(BaseModel):
 # Request/Response Models
 class SessionRequest(BaseModel):
     session_id: str
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
 
 class ListingCreate(BaseModel):
     title: str
@@ -266,6 +277,82 @@ async def create_session(session_req: SessionRequest, response: Response):
         raise HTTPException(status_code=401, detail="Invalid session_id")
     except Exception as e:
         logger.error(f"Session creation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/auth/google")
+async def google_auth(auth_req: GoogleAuthRequest, response: Response):
+    """Authenticate with Google ID token"""
+    try:
+        # Verify the Google ID token
+        idinfo = id_token.verify_oauth2_token(
+            auth_req.id_token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID
+        )
+        
+        # Get user info from token
+        email = idinfo['email']
+        name = idinfo.get('name', email.split('@')[0])
+        picture = idinfo.get('picture')
+        google_id = idinfo['sub']
+        
+        # Create or update user
+        user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+        
+        if user_doc:
+            # Update existing user
+            await db.users.update_one(
+                {"email": email},
+                {"$set": {
+                    "name": name,
+                    "picture": picture
+                }}
+            )
+            user_id = user_doc["user_id"]
+        else:
+            # Create new user
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            user_data = {
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "trust_score": 100,
+                "created_at": datetime.now(timezone.utc)
+            }
+            await db.users.insert_one(user_data)
+        
+        # Create session
+        session_token = f"session_{uuid.uuid4().hex}"
+        session_data = {
+            "user_id": user_id,
+            "session_token": session_token,
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+            "created_at": datetime.now(timezone.utc)
+        }
+        await db.user_sessions.insert_one(session_data)
+        
+        # Set cookie
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            path="/",
+            max_age=7 * 24 * 60 * 60  # 7 days
+        )
+        
+        # Get fresh user data
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        
+        return User(**user)
+        
+    except ValueError as e:
+        logger.error(f"Invalid Google ID token: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Google ID token")
+    except Exception as e:
+        logger.error(f"Google auth error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/auth/me")

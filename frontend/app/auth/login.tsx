@@ -1,36 +1,68 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Platform,
+  ActivityIndicator,
+  Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
+import { useAuthStore } from '../../store/authStore';
+import { api } from '../../utils/api';
 
-const API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
+// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID = '767037586953-nnman1s3mqlcvm18hf8oohupu33vm0kp.apps.googleusercontent.com';
 
 export default function LoginScreen() {
-  const handleGoogleSignIn = async () => {
-    try {
-      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = `${API_URL}/auth/callback`;
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const router = useRouter();
+  const { setUser } = useAuthStore();
+  const [loading, setLoading] = useState(false);
 
-      if (Platform.OS === 'web') {
-        // For web, use window.location
-        if (typeof window !== 'undefined') {
-          window.location.href = authUrl;
-        }
-      } else {
-        // For mobile, use WebBrowser
-        await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-      }
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_CLIENT_ID,
+  });
+
+  React.useEffect(() => {
+    if (response?.type === 'success') {
+      handleGoogleSignIn(response.params.id_token);
+    } else if (response?.type === 'error') {
+      Alert.alert('Sign In Error', 'Failed to sign in with Google');
+      setLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleSignIn = async (idToken: string) => {
+    try {
+      setLoading(true);
+      
+      // Send ID token to backend for verification
+      const user = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id_token: idToken }),
+        credentials: 'include',
+      }).then(res => {
+        if (!res.ok) throw new Error('Authentication failed');
+        return res.json();
+      });
+
+      setUser(user);
+      router.replace('/(tabs)');
     } catch (error) {
       console.error('Auth error:', error);
+      Alert.alert('Error', 'Failed to authenticate with Google');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -49,9 +81,22 @@ export default function LoginScreen() {
 
         <View style={styles.spacer} />
 
-        <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn}>
-          <Ionicons name="logo-google" size={24} color="#2563EB" />
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
+        <TouchableOpacity
+          style={[styles.googleButton, loading && styles.googleButtonDisabled]}
+          onPress={() => {
+            setLoading(true);
+            promptAsync();
+          }}
+          disabled={loading || !request}
+        >
+          {loading ? (
+            <ActivityIndicator color="#2563EB" />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={24} color="#2563EB" />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
@@ -99,6 +144,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D0D5DD',
     gap: 12,
+  },
+  googleButtonDisabled: {
+    opacity: 0.5,
   },
   googleButtonText: {
     fontSize: 16,
