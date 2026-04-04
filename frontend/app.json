@@ -2,7 +2,7 @@
   "expo": {
     "extra": {
       "EXPO_PUBLIC_BACKEND_URL": "https://grabit-backend-ftrk.onrender.com"
-    }
+    },
     "name": "GrabIt",
     "slug": "grabit",
     "version": "1.0.0",
