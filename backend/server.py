@@ -268,9 +268,9 @@ async def create_session(session_req: SessionRequest, response: Response):
         )
         
         # Get fresh user data
-        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+          user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
         
-        return User(**user)
+        return {**user, "session_token": session_token}
         
     except httpx.HTTPStatusError as e:
         logger.error(f"Auth API error: {e}")
@@ -344,9 +344,9 @@ async def google_auth(auth_req: GoogleAuthRequest, response: Response):
         )
         
         # Get fresh user data
-        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+         user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
         
-        return User(**user)
+        return {**user, "session_token": session_token}
         
     except ValueError as e:
         logger.error(f"Invalid Google ID token: {e}")
@@ -354,7 +354,6 @@ async def google_auth(auth_req: GoogleAuthRequest, response: Response):
     except Exception as e:
         logger.error(f"Google auth error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 @api_router.get("/auth/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     """Get current user info"""
