@@ -150,6 +150,65 @@ class RentRequestCreate(BaseModel):
 class ChatMessageCreate(BaseModel):
     message: str
 
+class SimpleLoginRequest(BaseModel):
+    name: str
+    email: str
+
+@api_router.post("/auth/simple-login")
+async def simple_login(login_req: SimpleLoginRequest, response: Response):
+    """Simple login with just name and email - no password needed"""
+    try:
+        email = login_req.email.lower().strip()
+        name = login_req.name.strip()
+        
+        # Create or update user
+        user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+        
+        if user_doc:
+            await db.users.update_one(
+                {"email": email},
+                {"$set": {"name": name}}
+            )
+            user_id = user_doc["user_id"]
+        else:
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            user_data = {
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": None,
+                "trust_score": 100,
+                "created_at": datetime.now(timezone.utc)
+            }
+            await db.users.insert_one(user_data)
+        
+        # Create session
+        session_token = f"session_{uuid.uuid4().hex}"
+        session_data = {
+            "user_id": user_id,
+            "session_token": session_token,
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
+            "created_at": datetime.now(timezone.utc)
+        }
+        await db.user_sessions.insert_one(session_data)
+        
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            path="/",
+            max_age=30 * 24 * 60 * 60
+        )
+        
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        return {**user, "session_token": session_token}
+        
+    except Exception as e:
+        logger.error(f"Simple login error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============================================================================
 # AUTH HELPERS
 # ============================================================================
